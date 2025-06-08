@@ -1,51 +1,57 @@
 import os
 import gdown
-from flask import Flask, request, jsonify
 from tensorflow.keras.models import load_model
-from tensorflow.keras.preprocessing import image
-import numpy as np
+from predictor import predict_classes  # Tahmin fonksiyonunu içeren dosya
 
 MODEL_PATH = "multi_output_model.h5"
 DRIVE_FILE_ID = "1iONcsu85I7NHnAGkfmb2hEh51B3KyzkK"
 
+# 📥 Modeli indir
 def download_model_from_drive():
     if not os.path.exists(MODEL_PATH):
         print("📥 Model indiriliyor...")
-        url = f"https://drive.google.com/uc?id={DRIVE_FILE_ID}"
-        gdown.download(url, MODEL_PATH, quiet=False)
+        gdown.download(id=DRIVE_FILE_ID, output=MODEL_PATH, quiet=False)
         print("✅ Model indirildi.")
 
+# 🧠 Modeli yükle
 download_model_from_drive()
 model = load_model(MODEL_PATH)
 
+# 📦 Sınıf isimleri
 minor_classes = ['asimetrik', 'hipertrofik', 'hipoplazik', 'normal']
 major_classes = ['asimetrik', 'hipertrofik', 'hipoplazik', 'normal', 'yağlı']
 klitoris_classes = ['bifid', 'hipertrofik', 'normal', 'yok', 'küçük']
 
+# 🌐 Flask API
+from flask import Flask, request, jsonify
+from PIL import Image
+import numpy as np
+
 app = Flask(__name__)
 
-@app.route("/predict", methods=["POST"])
+@app.route('/')
+def home():
+    return 'Labium AI API Çalışıyor!'
+
+@app.route('/predict', methods=['POST'])
 def predict():
-    if "image" not in request.files:
-        return jsonify({"error": "Görsel bulunamadı."}), 400
+    if 'image' not in request.files:
+        return jsonify({'error': 'Görsel yüklenmedi.'}), 400
 
-    img_file = request.files["image"]
-    img_path = "temp.jpg"
-    img_file.save(img_path)
-
-    img = image.load_img(img_path, target_size=(224, 224))
-    img_array = image.img_to_array(img) / 255.0
+    img_file = request.files['image']
+    img = Image.open(img_file).resize((224, 224))
+    img_array = np.array(img) / 255.0
     img_array = np.expand_dims(img_array, axis=0)
 
-    predictions = model.predict(img_array)
-    os.remove(img_path)
+    preds = model.predict(img_array)
 
     result = {
-        "labiominor": minor_classes[np.argmax(predictions[0])],
-        "labiomajor": major_classes[np.argmax(predictions[1])],
-        "klitoris": klitoris_classes[np.argmax(predictions[2])],
+        'labiominor': minor_classes[np.argmax(preds[0])],
+        'labiomajor': major_classes[np.argmax(preds[1])],
+        'klitoris': klitoris_classes[np.argmax(preds[2])]
     }
+
     return jsonify(result)
 
-if __name__ == "__main__":
-    app.run(debug=True)
+if __name__ == '__main__':
+    app.run()
