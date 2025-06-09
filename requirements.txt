@@ -3,3 +3,4 @@ tensorflow
 gdown
 numpy
 pillow
+flask_cors
