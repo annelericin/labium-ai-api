@@ -1,0 +1,5 @@
+__pycache__/
+*.pyc
+*.h5
+model/multi_output_model.h5
+.env
