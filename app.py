@@ -1,7 +1,7 @@
-from flask import Flask, jsonify, request
+from flask import Flask, request, jsonify
 from flask_cors import CORS
-import gdown
 import os
+import gdown
 import tensorflow as tf
 import numpy as np
 from PIL import Image
@@ -10,39 +10,56 @@ import io
 app = Flask(__name__)
 CORS(app)
 
-MODEL_PATH = "multi_output_model.h5"
+MODEL_PATH = "model/multi_output_model.h5"
 DRIVE_FILE_ID = "1iONcsu85I7NHnAGkfmb2hEh51B3KyzkK"
 
-def download_model_from_drive():
+# 🔽 Modeli Drive'dan indir
+def download_model():
     if not os.path.exists(MODEL_PATH):
-        print("📥 Model indiriliyor...")
+        os.makedirs(os.path.dirname(MODEL_PATH), exist_ok=True)
         url = f"https://drive.google.com/uc?id={DRIVE_FILE_ID}"
         gdown.download(url, MODEL_PATH, quiet=False)
-        print("✅ Model indirildi.")
 
-download_model_from_drive()
-model = tf.keras.models.load_model(MODEL_PATH)
+# 🔄 Modeli yükle
+def load_model():
+    try:
+        model = tf.keras.models.load_model(MODEL_PATH)
+        print("✅ Model yüklendi.")
+        return model
+    except Exception as e:
+        print("❌ Model yükleme hatası:", e)
+        return None
 
-@app.route("/")
-def home():
-    return jsonify({"message": "API aktif."})
+download_model()
+model = load_model()
 
-@app.route("/predict", methods=["POST"])
+# 🔍 Görseli işleyip tahmin et
+def preprocess_image(image_bytes):
+    image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+    image = image.resize((224, 224))
+    image_array = np.array(image) / 255.0
+    return np.expand_dims(image_array, axis=0)
+
+@app.route('/predict', methods=['POST'])
 def predict():
-    if 'file' not in request.files:
-        return jsonify({"error": "Dosya yüklenmedi."}), 400
+    if model is None:
+        return jsonify({'error': 'Model yüklenemedi'}), 500
 
-    file = request.files['file']
-    img = Image.open(file.stream).convert("RGB")
-    img = img.resize((224, 224))
-    img_array = np.array(img) / 255.0
-    img_array = np.expand_dims(img_array, axis=0)
+    if 'image' not in request.files:
+        return jsonify({'error': 'Görsel bulunamadı'}), 400
 
-    predictions = model.predict(img_array)[0]
-    labels = ['label1', 'label2', 'label3']  # ← burayı kendi sınıf etiketlerinle değiştir
+    image = request.files['image'].read()
+    try:
+        processed = preprocess_image(image)
+        preds = model.predict(processed)
+        response = {
+            'labiominor': preds[0].tolist(),
+            'labiomajor': preds[1].tolist(),
+            'klitoris': preds[2].tolist()
+        }
+        return jsonify(response)
+    except Exception as e:
+        return jsonify({'error': f'Tahmin sırasında hata: {str(e)}'}), 500
 
-    result = {label: float(pred) for label, pred in zip(labels, predictions)}
-    return jsonify(result)
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=10000)
+if __name__ == '__main__':
+    app.run(debug=True)
