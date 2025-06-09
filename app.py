@@ -3,8 +3,8 @@ from flask_cors import CORS
 import gdown
 import os
 import tensorflow as tf
-from PIL import Image
 import numpy as np
+from PIL import Image
 
 app = Flask(__name__)
 CORS(app)
@@ -29,22 +29,17 @@ def home():
 @app.route("/predict", methods=["POST"])
 def predict():
     if 'image' not in request.files:
-        return jsonify({"error": "Görsel yüklenmedi."}), 400
-
-    image_file = request.files['image']
-    image = Image.open(image_file).convert("RGB")
-    image = image.resize((224, 224))
-    image_array = np.array(image) / 255.0
-    image_array = np.expand_dims(image_array, axis=0)
-
-    predictions = model.predict(image_array)[0]
-    prediction_labels = {
-        "Labiominor": str(np.argmax(predictions[:3])),
-        "Labiomajor": str(np.argmax(predictions[3:6])),
-        "Klitoris": str(np.argmax(predictions[6:9]))
-    }
-
-    return jsonify({"tahmin": prediction_labels})
+        return jsonify({"error": "Resim dosyası gerekli."}), 400
+    
+    file = request.files['image']
+    try:
+        image = Image.open(file.stream).resize((224, 224))
+        image = np.array(image) / 255.0
+        image = np.expand_dims(image, axis=0)
+        prediction = model.predict(image)
+        return jsonify({"tahmin": prediction.tolist()})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000)
