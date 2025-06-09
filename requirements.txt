@@ -1,6 +1,6 @@
-flask
+Flask
+flask-cors
 tensorflow
-gdown
 numpy
-pillow
-flask_cors
+Pillow
+gdown
